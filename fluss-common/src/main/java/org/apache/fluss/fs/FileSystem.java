@@ -222,6 +222,15 @@ public abstract class FileSystem {
      */
     private static final HashMap<String, FileSystemPlugin> FS_PLUGINS = new HashMap<>();
 
+    /**
+     * Filesystem plugins registered through a plugin manager, keyed by scheme. Retained across an
+     * initialization without a plugin manager, so that applying a configuration (e.g. a client
+     * connection applying its {@code client.fs.*} options) does not discard the process-wide
+     * filesystems loaded from the plugins directory; only an initialization with a plugin manager
+     * replaces them.
+     */
+    private static final HashMap<String, FileSystemPlugin> PLUGIN_FS_PLUGINS = new HashMap<>();
+
     /** All known plugins for a given scheme. */
     private static final Multimap<String, String> DIRECTLY_SUPPORTED_FILESYSTEM =
             ImmutableMultimap.<String, String>builder()
@@ -247,6 +256,11 @@ public abstract class FileSystem {
      * file systems. Because the configuration of file systems may be different subsequent to the
      * call of this method, this method clears the file system instance cache.
      *
+     * <p>A call without a plugin manager retains the filesystem plugins registered through the
+     * plugin manager of the last call with one; only a call with a plugin manager replaces them.
+     * This allows clients to apply their configuration without discarding the process-wide
+     * filesystems loaded from the plugins directory.
+     *
      * @param config the configuration from where to fetch the parameter.
      * @param pluginManager optional plugin manager that is used to initialized filesystems provided
      *     as plugins.
@@ -259,6 +273,17 @@ public abstract class FileSystem {
                     // make sure file systems are re-instantiated after re-configuration
                     CACHE.clear();
                     FS_PLUGINS.clear();
+
+                    if (pluginManager != null) {
+                        PLUGIN_FS_PLUGINS.clear();
+                    } else {
+                        // Retain the plugins registered through a plugin manager: an
+                        // initialization without a plugin manager applies a configuration
+                        // (e.g. a client connection applying its client.fs.* options) and
+                        // must not discard the filesystems loaded from the plugins
+                        // directory. Freshly loaded plugins replace same-scheme entries.
+                        FS_PLUGINS.putAll(PLUGIN_FS_PLUGINS);
+                    }
 
                     // set the configuration
                     configuration = config;
@@ -288,6 +313,10 @@ public abstract class FileSystem {
                         String scheme = plugin.getScheme();
 
                         FS_PLUGINS.put(scheme, plugin);
+                    }
+
+                    if (pluginManager != null) {
+                        PLUGIN_FS_PLUGINS.putAll(FS_PLUGINS);
                     }
                 });
     }

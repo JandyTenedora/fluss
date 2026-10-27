@@ -157,6 +157,46 @@ class FileSystemTest {
         }
     }
 
+    @Test
+    void testPluginFilesystemsSurviveInitializationWithoutPluginManager() throws Exception {
+        final String testPluginSchema = "test-plugin-retain";
+
+        // a tool that loads the plugins directory registers filesystems through a plugin manager
+        FileSystem.initialize(new Configuration(), pluginManagerFor(testPluginSchema));
+        assertThat(FileSystem.get(URI.create(testPluginSchema + ":///a/b/c")))
+                .isInstanceOf(PluginFileSystemWrapper.ClassLoaderFixingFileSystem.class);
+
+        // applying a configuration without a plugin manager — what a client connection does to
+        // apply its client.fs.* options — must retain the plugin filesystem
+        FileSystem.initialize(new Configuration(), null);
+        assertThat(FileSystem.get(URI.create(testPluginSchema + ":///a/b/c")))
+                .isInstanceOf(PluginFileSystemWrapper.ClassLoaderFixingFileSystem.class);
+
+        // an initialization with a plugin manager replaces the retained plugins: a scheme the
+        // manager no longer provides is unknown again
+        FileSystem.initialize(new Configuration(), emptyFileSystemPluginManager());
+        assertThatThrownBy(() -> FileSystem.get(URI.create(testPluginSchema + ":///a/b/c")))
+                .isInstanceOf(UnsupportedFileSystemSchemeException.class);
+    }
+
+    private static PluginManager pluginManagerFor(String scheme) {
+        final Map<Class<?>, Iterator<?>> fileSystemPlugins = new HashMap<>();
+        fileSystemPlugins.put(
+                FileSystemPlugin.class,
+                Collections.singletonList(
+                                new TestPluginFileSystemPlugin(
+                                        scheme, LocalFileSystem.getSharedInstance()))
+                        .iterator());
+        return new TestingPluginManager(fileSystemPlugins);
+    }
+
+    private static PluginManager emptyFileSystemPluginManager() {
+        final Map<Class<?>, Iterator<?>> fileSystemPlugins = new HashMap<>();
+        fileSystemPlugins.put(
+                FileSystemPlugin.class, Collections.<FileSystemPlugin>emptyIterator());
+        return new TestingPluginManager(fileSystemPlugins);
+    }
+
     private static FileSystem getFileSystemWithoutSafetyNet(final String uri)
             throws URISyntaxException, IOException {
         final FileSystem fileSystem = FileSystem.get(new URI(uri));
