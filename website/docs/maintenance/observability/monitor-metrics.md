@@ -1357,6 +1357,24 @@ All metrics are registered under the `fluss.tieringService` metric group, as a c
             <td>Meter</td>
         </tr>
         <tr>
+            <td>writeRecords</td>
+            <td>Flink Source Operator</td>
+            <td>The cumulative number of records written to the lake since the tiering job started, across the log, KV snapshot and Arrow batch write paths.</td>
+            <td>Counter</td>
+        </tr>
+        <tr>
+            <td>writeBytes</td>
+            <td>Flink Source Operator</td>
+            <td>The cumulative bytes written to the lake since the tiering job started, measured on the records handed to the lake writer.</td>
+            <td>Counter</td>
+        </tr>
+        <tr>
+            <td>writeBytesPerSecond</td>
+            <td>Flink Source Operator</td>
+            <td>The write throughput rate in bytes per second, derived from the writeBytes counter using a 60-second sliding window.</td>
+            <td>Meter</td>
+        </tr>
+        <tr>
             <td>readersAwaitingSplitRatio</td>
             <td>Flink Source Enumerator</td>
             <td>The current ratio (0–1) of readers tracked by the enumerator as waiting for a split to the source parallelism.</td>

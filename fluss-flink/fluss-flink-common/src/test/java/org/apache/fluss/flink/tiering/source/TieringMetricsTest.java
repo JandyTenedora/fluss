@@ -50,4 +50,31 @@ class TieringMetricsTest {
         assertThat(counter).isPresent();
         assertThat(counter.get().getCount()).isEqualTo(300);
     }
+
+    @Test
+    void testRecordWritten() {
+        MetricListener metricListener = new MetricListener();
+        TieringMetrics tieringMetrics =
+                new TieringMetrics(
+                        InternalSourceReaderMetricGroup.mock(metricListener.getMetricGroup()));
+
+        tieringMetrics.recordWritten(1, 100);
+        tieringMetrics.recordWritten(3, 250);
+
+        Optional<Counter> recordsCounter =
+                metricListener.getCounter(
+                        TieringMetrics.FLUSS_METRIC_GROUP,
+                        TieringMetrics.TIERING_SERVICE_GROUP,
+                        MetricNames.TIERING_SERVICE_WRITE_RECORDS);
+        assertThat(recordsCounter).isPresent();
+        assertThat(recordsCounter.get().getCount()).isEqualTo(4);
+
+        Optional<Counter> bytesCounter =
+                metricListener.getCounter(
+                        TieringMetrics.FLUSS_METRIC_GROUP,
+                        TieringMetrics.TIERING_SERVICE_GROUP,
+                        MetricNames.TIERING_SERVICE_WRITE_BYTES);
+        assertThat(bytesCounter).isPresent();
+        assertThat(bytesCounter.get().getCount()).isEqualTo(350);
+    }
 }

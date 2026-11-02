@@ -579,6 +579,7 @@ public class TieringSplitReader<WriteResult>
                 if (record.getSizeInBytes() > 0) {
                     tieringMetrics.recordBytesRead(record.getSizeInBytes());
                 }
+                tieringMetrics.recordWritten(1, record.getSizeInBytes());
             }
         }
         return lastWrittenTimestamp;
@@ -633,6 +634,7 @@ public class TieringSplitReader<WriteResult>
             if (batchSizeInBytes > 0) {
                 tieringMetrics.recordBytesRead(batchSizeInBytes);
             }
+            tieringMetrics.recordWritten(batchToWrite.getRecordCount(), batchSizeInBytes);
             lastWrittenTimestamp = batchTimestamp;
         }
         return lastWrittenTimestamp;
@@ -761,6 +763,7 @@ public class TieringSplitReader<WriteResult>
             if (scanRecord.getSizeInBytes() > 0) {
                 tieringMetrics.recordBytesRead(scanRecord.getSizeInBytes());
             }
+            tieringMetrics.recordWritten(1, scanRecord.getSizeInBytes());
         }
         recordIterator.close();
         return emptyTableBucketWriteResultWithSplitIds();

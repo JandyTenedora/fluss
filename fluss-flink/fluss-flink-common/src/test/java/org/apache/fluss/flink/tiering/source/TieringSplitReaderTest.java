@@ -39,6 +39,7 @@ import org.apache.fluss.metadata.MergeEngineType;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.metrics.MetricNames;
 import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.row.encode.CompactedKeyEncoder;
@@ -47,6 +48,7 @@ import org.apache.fluss.server.replica.Replica;
 import org.apache.flink.api.connector.source.SourceSplit;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.testutils.MetricListener;
 import org.apache.flink.runtime.metrics.groups.InternalSourceReaderMetricGroup;
 import org.junit.jupiter.api.Test;
@@ -60,6 +62,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -169,6 +172,55 @@ class TieringSplitReaderTest extends FlinkTestBase {
             assertThat(lakeTieringFactory.getCreatedLakeWriters()).isNotEmpty();
             assertThat(lakeTieringFactory.getCreatedLakeWriters())
                     .allSatisfy(writer -> assertThat(writer.isClosed()).isTrue());
+        }
+    }
+
+    @Test
+    void testWriteMetrics() throws Exception {
+        TablePath tablePath = TablePath.of("fluss", "fluss_test_tiering_write_metrics");
+        long tableId = createTable(tablePath, DEFAULT_PK_TABLE_DESCRIPTOR);
+        MetricListener metricListener = new MetricListener();
+        TestingLakeTieringFactory lakeTieringFactory = new TestingLakeTieringFactory();
+        try (Connection connection =
+                        ConnectionFactory.createConnection(
+                                FLUSS_CLUSTER_EXTENSION.getClientConfig());
+                TieringSplitReader<TestingWriteResult> tieringSplitReader =
+                        createTieringReader(connection, lakeTieringFactory, metricListener)) {
+            Map<TableBucket, List<InternalRow>> rows = putRows(tableId, tablePath, 10);
+            FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tablePath);
+
+            SplitsAddition<FlinkTieringSplit> splitsAddition =
+                    new SplitsAddition<>(
+                            Arrays.asList(
+                                    createSnapshotSplit(tablePath, tableId, 0, 0),
+                                    createSnapshotSplit(tablePath, tableId, 1, 0),
+                                    createSnapshotSplit(tablePath, tableId, 2, 0)));
+            Set<String> splitIds =
+                    splitsAddition.splits().stream()
+                            .map(FlinkTieringSplit::splitId)
+                            .collect(Collectors.toSet());
+            tieringSplitReader.handleSplitsChanges(splitsAddition);
+
+            Map<TableBucket, Integer> expectTierRows = new HashMap<>();
+            rows.forEach((bucket, bucketRows) -> expectTierRows.put(bucket, bucketRows.size()));
+            verifyTieringRows(tieringSplitReader, tableId, expectTierRows, splitIds);
+
+            int expectedRows = rows.values().stream().mapToInt(List::size).sum();
+            Optional<Counter> recordsCounter =
+                    metricListener.getCounter(
+                            TieringMetrics.FLUSS_METRIC_GROUP,
+                            TieringMetrics.TIERING_SERVICE_GROUP,
+                            MetricNames.TIERING_SERVICE_WRITE_RECORDS);
+            assertThat(recordsCounter).isPresent();
+            assertThat(recordsCounter.get().getCount()).isEqualTo(expectedRows);
+
+            Optional<Counter> bytesCounter =
+                    metricListener.getCounter(
+                            TieringMetrics.FLUSS_METRIC_GROUP,
+                            TieringMetrics.TIERING_SERVICE_GROUP,
+                            MetricNames.TIERING_SERVICE_WRITE_BYTES);
+            assertThat(bytesCounter).isPresent();
+            assertThat(bytesCounter.get().getCount()).isGreaterThan(0);
         }
     }
 
@@ -557,6 +609,20 @@ class TieringSplitReaderTest extends FlinkTestBase {
                 new TieringMetrics(
                         InternalSourceReaderMetricGroup.mock(
                                 new MetricListener().getMetricGroup()));
+        return new TieringSplitReader<>(
+                connection,
+                lakeTieringFactory,
+                Thread.currentThread().getContextClassLoader(),
+                tieringMetrics);
+    }
+
+    private TieringSplitReader<TestingWriteResult> createTieringReader(
+            Connection connection,
+            TestingLakeTieringFactory lakeTieringFactory,
+            MetricListener metricListener) {
+        final TieringMetrics tieringMetrics =
+                new TieringMetrics(
+                        InternalSourceReaderMetricGroup.mock(metricListener.getMetricGroup()));
         return new TieringSplitReader<>(
                 connection,
                 lakeTieringFactory,

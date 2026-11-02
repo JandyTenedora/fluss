@@ -402,6 +402,9 @@ public class MetricNames {
     // for lake tiering metrics - operator level
     public static final String TIERING_SERVICE_READ_BYTES = "readBytes";
     public static final String TIERING_SERVICE_READ_BYTES_RATE = "readBytesPerSecond";
+    public static final String TIERING_SERVICE_WRITE_RECORDS = "writeRecords";
+    public static final String TIERING_SERVICE_WRITE_BYTES = "writeBytes";
+    public static final String TIERING_SERVICE_WRITE_BYTES_RATE = "writeBytesPerSecond";
 
     // for lake tiering metrics - enumerator level
     public static final String TIERING_SERVICE_READERS_AWAITING_SPLIT_RATIO =

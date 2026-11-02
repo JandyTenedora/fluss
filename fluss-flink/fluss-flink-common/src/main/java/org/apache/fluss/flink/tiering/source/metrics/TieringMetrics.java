@@ -42,6 +42,12 @@ import org.apache.flink.runtime.metrics.groups.AbstractMetricGroup;
  *       since the job started (actual Fluss records size).
  *   <li>{@code fluss.tieringService.readBytesPerSecond} - Meter: bytes-per-second rate derived from
  *       the counter using a 60-second sliding window.
+ *   <li>{@code fluss.tieringService.writeRecords} - Counter: cumulative records written to the lake
+ *       since the job started, across the log, KV snapshot and Arrow batch write paths.
+ *   <li>{@code fluss.tieringService.writeBytes} - Counter: cumulative bytes handed to the lake
+ *       writer since the job started.
+ *   <li>{@code fluss.tieringService.writeBytesPerSecond} - Meter: bytes-per-second write rate
+ *       derived from the counter using a 60-second sliding window.
  *   <li>{@code fluss.tieringService.readersAwaitingSplitRatio} - Gauge: fraction of source readers
  *       waiting for splits, reported by the enumerator.
  * </ul>
@@ -54,6 +60,8 @@ public class TieringMetrics {
     public static final String TIERING_SERVICE_GROUP = "tieringService";
 
     private final Counter readBytesCounter;
+    private final Counter writeRecordsCounter;
+    private final Counter writeBytesCounter;
 
     public TieringMetrics(SourceReaderMetricGroup sourceReaderMetricGroup) {
         MetricGroup tieringServiceGroup =
@@ -64,11 +72,23 @@ public class TieringMetrics {
         this.readBytesCounter = tieringServiceGroup.counter(MetricNames.TIERING_SERVICE_READ_BYTES);
         tieringServiceGroup.meter(
                 MetricNames.TIERING_SERVICE_READ_BYTES_RATE, new MeterView(readBytesCounter));
+        this.writeRecordsCounter =
+                tieringServiceGroup.counter(MetricNames.TIERING_SERVICE_WRITE_RECORDS);
+        this.writeBytesCounter =
+                tieringServiceGroup.counter(MetricNames.TIERING_SERVICE_WRITE_BYTES);
+        tieringServiceGroup.meter(
+                MetricNames.TIERING_SERVICE_WRITE_BYTES_RATE, new MeterView(writeBytesCounter));
     }
 
     /** Records bytes read from Fluss records. Called per batch or record processing. */
     public void recordBytesRead(long bytes) {
         readBytesCounter.inc(bytes);
+    }
+
+    /** Records records and bytes written to the lake. Called per record or batch write. */
+    public void recordWritten(long records, long bytes) {
+        writeRecordsCounter.inc(records);
+        writeBytesCounter.inc(bytes);
     }
 
     /** Registers the waiting reader ratio and returns a handle to close its metric subgroup. */
