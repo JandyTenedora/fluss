@@ -32,6 +32,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.function.Function;
 
 import static org.apache.flink.configuration.RestartStrategyOptions.RestartStrategyType.EXPONENTIAL_DELAY;
 import static org.apache.flink.runtime.executiongraph.failover.FailoverStrategyFactoryLoader.FULL_RESTART_STRATEGY_NAME;
@@ -97,6 +98,14 @@ public class FlussLakeTiering {
     public FlussLakeTiering(
             Map<String, String> paramsMap,
             org.apache.flink.configuration.Configuration flinkConfig) {
+        this(paramsMap, flinkConfig, StreamExecutionEnvironment::getExecutionEnvironment);
+    }
+
+    FlussLakeTiering(
+            Map<String, String> paramsMap,
+            org.apache.flink.configuration.Configuration flinkConfig,
+            Function<org.apache.flink.configuration.Configuration, StreamExecutionEnvironment>
+                    environmentFactory) {
         checkNotNull(paramsMap, "%s must not be null", "paramsMap");
         checkNotNull(flinkConfig, "%s must not be null", "flinkConfig");
         // parse params
@@ -143,7 +152,7 @@ public class FlussLakeTiering {
         // when checkpoint is not enabled, causing the job to fail permanently on any exception.
         flinkConfig.set(RestartStrategyOptions.RESTART_STRATEGY, EXPONENTIAL_DELAY.getMainValue());
 
-        execEnv = StreamExecutionEnvironment.getExecutionEnvironment(flinkConfig);
+        execEnv = environmentFactory.apply(flinkConfig);
     }
 
     /** Resolves {@code ${provider:...}} markers in all parameters before prefix extraction. */
