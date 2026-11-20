@@ -184,6 +184,21 @@ Unless `JAVA_TOOL_OPTIONS` is set, the image starts the JVM with
 memory limit; setting `JAVA_TOOL_OPTIONS` replaces these defaults entirely, so an override must
 configure both the heap and the direct memory.
 
+### Helm Chart
+
+The Helm chart can deploy the tiering service alongside the Fluss cluster as a stateless Deployment
+that defaults to tiering the release's own cluster:
+
+```shell
+helm install fluss helm/ \
+    --set embeddedTiering.enabled=true \
+    --set embeddedTiering.image.repository=<registry>/fluss-tiering \
+    --set embeddedTiering.image.tag=<tag>
+```
+
+See the [module README](https://github.com/apache/fluss/blob/main/fluss-flink/fluss-flink-tiering/src/README.md)
+and the chart's `embeddedTiering` values block for the full configuration surface.
+
 ## Partition Mark-Done
 
 The Tiering Service supports marking idle partitions of Paimon tables done. Enable the job-level option `--lake.tiering.partition.mark-done.enabled true` and configure `partition.idle-time-to-done` on the Paimon table. Runtime checks and actions use the **actual Paimon table options**. Fluss `paimon.*` properties can pass these options to Paimon when creating a table; retained Fluss properties do not override the lake table at runtime.

@@ -107,3 +107,20 @@ Unless `JAVA_TOOL_OPTIONS` is set, the image starts the JVM with
 `-XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=512m`, sizing the heap from the container memory
 limit; setting `JAVA_TOOL_OPTIONS` replaces these defaults entirely, so an override must configure
 both the heap and the direct memory.
+
+### Helm chart
+
+The `helm` chart can deploy the tiering service alongside the Fluss cluster as a stateless
+Deployment. It is disabled by default and uses the image above:
+
+```shell
+helm install fluss helm/ \
+    --set embeddedTiering.enabled=true \
+    --set embeddedTiering.image.repository=<registry>/fluss-tiering \
+    --set embeddedTiering.image.tag=<tag>
+```
+
+By default the service tiers this release's own cluster and reads the lake catalog configuration
+from `embeddedTiering.configurationOverrides`. Set `embeddedTiering.configurationOverrides."fluss.bootstrap.servers"`
+to tier for a Fluss cluster outside the release. The chart validates that `datalake.format` is set
+when the service is enabled.
