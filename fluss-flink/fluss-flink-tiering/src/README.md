@@ -76,3 +76,34 @@ If `parallelism.default` is unset, the embedded runtime runs the tiering source 
 CPU core count (Flink's default local parallelism), which must also fit within the aggregate slot
 capacity. If `taskmanager.numberOfTaskSlots` is unset, Flink auto-sizes the slots per TaskManager
 by rounding up the job's maximum parallelism divided by the TaskManager count.
+
+### Docker image
+
+`docker/fluss-tiering` packages this embedded mode into a self-contained image: the official Flink
+distribution carries the runtime, and the Fluss tiering jars plus the lake format bundles live in
+its `lib` directory. Build and smoke-test it with:
+
+```shell
+# Build the Fluss jars first: the tiering module plus the Flink 1.20 connector and the
+# lake format artifacts that prepare_build.sh resolves from the local Maven repository.
+./mvnw clean install -DskipTests \
+    -pl fluss-flink/fluss-flink-tiering,fluss-flink/fluss-flink-1.20,fluss-lake/fluss-lake-paimon,fluss-lake/fluss-lake-iceberg,fluss-lake/fluss-lake-lance \
+    -am
+docker/fluss-tiering/build.sh
+RUN_SMOKE=true docker/fluss-tiering/build.sh
+```
+
+The image bundles the Paimon, Iceberg, and Lance lake plugins with their runtime bundles; for other
+formats or extra filesystem jars, extend the image by adding jars to `/opt/flink/lib`. The bundled
+Hadoop `flink-shaded-hadoop-2-uber` jar suits Paimon but must be swapped for `hadoop-client-api`
+and `hadoop-client-runtime` for Iceberg with the Glue or Hadoop catalog (see the Glue catalog doc
+at `website/docs/streaming-lakehouse/datalake-catalogs/glue.md`). Configuration
+is provided by mounting a file at `/opt/fluss/conf/tiering.yaml` (or setting `TIERING_CONFIG_FILE`),
+or by passing `key: value` pairs through the `FLUSS_TIERING_PROPERTIES` environment variable;
+values may reference environment variables as `${VAR}`. A `${VAR}` reference to a variable that
+is not set aborts startup with exit code 1 and an error naming the variable.
+
+Unless `JAVA_TOOL_OPTIONS` is set, the image starts the JVM with
+`-XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=512m`, sizing the heap from the container memory
+limit; setting `JAVA_TOOL_OPTIONS` replaces these defaults entirely, so an override must configure
+both the heap and the direct memory.

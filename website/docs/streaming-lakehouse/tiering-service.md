@@ -150,6 +150,40 @@ CPU core count (Flink's default local parallelism), which must also fit within t
 capacity. If `taskmanager.numberOfTaskSlots` is unset, Flink auto-sizes the slots per TaskManager
 by rounding up the job's maximum parallelism divided by the TaskManager count.
 
+### Docker Image
+
+The `docker/fluss-tiering` directory packages this mode into a self-contained image: the official
+Flink distribution carries the runtime, and the Fluss tiering jars plus the Paimon, Iceberg, and
+Lance lake plugins live in its `lib` directory. The image bundles the Hadoop
+`flink-shaded-hadoop-2-uber` jar, which suits the Paimon default but not Iceberg with the Glue or
+Hadoop catalog, where it causes `NoSuchMethodError: LogicalTypes.timestampNanos()`. For those
+setups, swap it for the `hadoop-client-api` and `hadoop-client-runtime` jars as described in the
+[AWS Glue catalog documentation](./datalake-catalogs/glue.md).
+
+Build it from the repository root; the Fluss artifacts must already be in the local Maven
+repository (the version under development is not published to Maven Central), so build the
+required modules first:
+
+```shell
+# Build the Fluss jars first: the tiering module plus the Flink 1.20 connector and the
+# lake format artifacts that prepare_build.sh resolves from the local Maven repository.
+./mvnw clean install -DskipTests \
+    -pl fluss-flink/fluss-flink-tiering,fluss-flink/fluss-flink-1.20,fluss-lake/fluss-lake-paimon,fluss-lake/fluss-lake-iceberg,fluss-lake/fluss-lake-lance \
+    -am
+docker/fluss-tiering/build.sh
+```
+
+Configuration is provided by mounting a file at `/opt/fluss/conf/tiering.yaml` (or setting
+`TIERING_CONFIG_FILE`), or by passing `key: value` pairs through the `FLUSS_TIERING_PROPERTIES`
+environment variable; values may reference environment variables as `${VAR}`. A `${VAR}` reference
+to a variable that is not set aborts startup with exit code 1 and an error message naming the
+variable.
+
+Unless `JAVA_TOOL_OPTIONS` is set, the image starts the JVM with
+`-XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=512m`, sizing the heap from the container's
+memory limit; setting `JAVA_TOOL_OPTIONS` replaces these defaults entirely, so an override must
+configure both the heap and the direct memory.
+
 ## Partition Mark-Done
 
 The Tiering Service supports marking idle partitions of Paimon tables done. Enable the job-level option `--lake.tiering.partition.mark-done.enabled true` and configure `partition.idle-time-to-done` on the Paimon table. Runtime checks and actions use the **actual Paimon table options**. Fluss `paimon.*` properties can pass these options to Paimon when creating a table; retained Fluss properties do not override the lake table at runtime.
